@@ -1,0 +1,283 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  CLIENT
+  VIEWER
+}
+
+enum SubscriptionTier {
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
+}
+
+enum PlatformType {
+  FACEBOOK
+  INSTAGRAM
+  TWITTER
+  LINKEDIN
+  TIKTOK
+  YOUTUBE
+  PINTEREST
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  avatar    String?
+  role      UserRole @default(CLIENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  accounts        Account[]
+  subscription    Subscription?
+  posts           Post[]
+  comments        Comment[]
+  aiInteractions  AIInteraction[]
+  clients         Client[]
+  whatsappTriggers WhatsAppTrigger[]
+  campaigns       Campaign[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String      @id @default(cuid())
+  userId            String
+  platform          PlatformType
+  platformAccountId String
+  platformUsername  String
+  accessToken       String
+  refreshToken      String?
+  tokenExpiresAt    DateTime?
+  isActive          Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  // Relations
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts Post[]
+  analytics Analytics[]
+
+  @@unique([userId, platform, platformAccountId])
+  @@map("accounts")
+}
+
+model Subscription {
+  id              String           @id @default(cuid())
+  userId          String           @unique
+  tier            SubscriptionTier
+  stripeCustomerId String?
+  stripePriceId   String?
+  stripeSubscriptionId String?
+  status          String           @default("active")
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  postsLimit      Int              @default(10)
+  accountsLimit   Int              @default(3)
+  aiCreditsLimit  Int              @default(100)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  whatsappNumber String?
+  brandGuidelines Json?
+  userId      String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts     Post[]
+  campaigns Campaign[]
+  whatsappTriggers WhatsAppTrigger[]
+
+  @@map("clients")
+}
+
+model Post {
+  id          String     @id @default(cuid())
+  title       String?
+  content     String
+  mediaUrls   String[]
+  hashtags    String[]
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  status      PostStatus @default(DRAFT)
+  userId      String
+  accountId   String
+  clientId    String?
+  campaignId  String?
+  bufferPostId String?
+  aiGenerated Boolean    @default(false)
+  aiPrompt    String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  client    Client?   @relation(fields: [clientId], references: [id])
+  campaign  Campaign? @relation(fields: [campaignId], references: [id])
+  comments  Comment[]
+  analytics Analytics[]
+
+  @@map("posts")
+}
+
+model Comment {
+  id            String   @id @default(cuid())
+  content       String
+  platformCommentId String
+  authorName    String
+  authorUsername String?
+  authorAvatar  String?
+  postId        String
+  userId        String
+  isReplied     Boolean  @default(false)
+  aiReply       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime?
+  userId      String
+  clientId    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id])
+  posts  Post[]
+
+  @@map("campaigns")
+}
+
+model Analytics {
+  id          String   @id @default(cuid())
+  postId      String
+  accountId   String
+  impressions Int      @default(0)
+  engagements Int      @default(0)
+  likes       Int      @default(0)
+  shares      Int      @default(0)
+  comments    Int      @default(0)
+  clicks      Int      @default(0)
+  reach       Int      @default(0)
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  post    Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, date])
+  @@map("analytics")
+}
+
+model AIInteraction {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // "content_generation", "performance_analysis", "engagement_reply"
+  prompt      String
+  response    String
+  metadata    Json?
+  tokensUsed  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_interactions")
+}
+
+model WhatsAppTrigger {
+  id          String   @id @default(cuid())
+  userId      String
+  clientId    String?
+  phoneNumber String
+  message     String
+  triggerType String   // "post_request", "approval", "analytics_request"
+  status      String   @default("pending") // "pending", "processing", "completed", "failed"
+  response    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id])
+
+  @@map("whatsapp_triggers")
+}
+
+model Trend {
+  id          String   @id @default(cuid())
+  platform    PlatformType
+  keyword     String
+  rank        Int
+  volume      Int?
+  region      String   @default("global")
+  category    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([platform, keyword, region, createdAt])
+  @@map("trends")
+}
+
+model Webhook {
+  id        String   @id @default(cuid())
+  platform  String
+  eventType String
+  payload   Json
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("webhooks")
+}
